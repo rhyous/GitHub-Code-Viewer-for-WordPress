@@ -43,7 +43,7 @@ class github {
         if (isset($this->cache[$match])) {
           $code = $this->cache[$match];
         } else {
-          $find = str_replace('httpc', 'http', $match);
+          $find = str_replace('httpc', 'https', $match);
           $code = wp_remote_fopen($find . '?raw=true');
           $code = str_replace('<', '&lt;', $code);
           $this->__setCache($match, $code);
