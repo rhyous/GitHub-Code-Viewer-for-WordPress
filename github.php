@@ -1,23 +1,23 @@
 <?php
 /*
-Plugin Name: GitHub Code Viewer
-Version: 1.0
-Plugin URI: http://www.pseudocoder.com/archives/2008/10/29/wordpress-plugin-for-showing-github-code/
+Plugin Name: Code From Url
+Version: 2.0
+Plugin URI: tba
 Description:
-Author: Matt Curry
-Author URI: http://www.pseudocoder.com
+Author: Jared Barneck (Rhyous)
+Author URI: http://www.rhyous.com
 */
 
 class github {
   var $db;
-  var $table = "github";
+  var $table;
   var $cache = array();
 
   function github() {
     global $wpdb;
 
     $this->db = $wpdb;
-    $this->table = $this->db->prefix . "github";
+    $this->table = $this->db->prefix . "CodeAsUrl";
   }
 
   function install() {
@@ -35,20 +35,24 @@ class github {
   }
 
   function get_code($text='') {
-    $pattern = '/(httpc:\/\/[a-z0-9\/\_\-.]{1,})/i';
+    $pattern = '/(CodeFromUrl=["\'][^"\']*["\'])/i';
     if (preg_match_all($pattern, $text, $matches)) {
-      $this->__loadCache($matches[0]);
+      $urls = [];
+      $i = 0;
+      foreach($matches[0] as $match) {
+        $urls[$i++] = trim(str_replace('CodeFromUrl=', '', $match), "\"");
+      }
+      $this->__loadCache($urls);
 
       foreach($matches[0] as $match) {
-        if (isset($this->cache[$match])) {
-          $code = $this->cache[$match];
+        $url = trim(str_replace('CodeFromUrl=', '', $match), "\"");
+        if (isset($this->cache[$url])) {
+          $code = $this->cache[$url];
         } else {
-          $find = str_replace('httpc', 'https', $match);
-          $code = wp_remote_fopen($find . '?raw=true');
+          $code = wp_remote_fopen($url);
           $code = str_replace('<', '&lt;', $code);
-          $this->__setCache($match, $code);
+          $this->__setCache($url, $code);
         }
-
         $text = str_replace($match, $code, $text);
       }
     }
@@ -57,11 +61,7 @@ class github {
   }
 
   function __loadCache($urls) {
-    $sql = sprintf('SELECT * FROM `%s`
-                   WHERE url IN ("%s")',
-                   $this->table,
-                   implode('", "', $urls));
-
+    $sql = $this->db->prepare( "SELECT * FROM $this->table WHERE url IN (%s)", implode('", "', $urls)); 
     $results = $this->db->get_results($sql, ARRAY_A);
     if ($results) {
       $old = array();
@@ -74,10 +74,7 @@ class github {
       }
       
       if($old) {
-        $sql = sprintf('DELETE FROM `%s` WHERE id IN (%s)',
-                       $this->table,
-                       implode(',', $old));
-        $this->db->query($sql);
+        $this->db->delete( $this->table, array( 'id' => implode(',', $old) ) );
       }
     }
 
@@ -85,17 +82,12 @@ class github {
   }
 
   function __setCache($url, $code) {
-    $sql = sprintf('INSERT INTO `%s` (`url`, `code`, `updated`) VALUES ("%s", "%s", "%s")',
-                   $this->table,
-                   $url,
-                   mysql_real_escape_string($code),
-                   date('Y-m-d H:i:s'));
-    $result = $this->db->query($sql);
+    $this->db->insert( $this->table, array( 'url' => $url, 'code' => $code, 'updated' => date('Y-m-d H:i:s')));
   }
 }
 
-$github =& new github();
-register_activation_hook(__FILE__, array(&$github, 'install'));
-register_deactivation_hook(__FILE__, array(&$github, 'uninstall'));
-add_filter('the_content', array(&$github, 'get_code'), 8);
+$github = new github();
+register_activation_hook(__FILE__, array($github, 'install'));
+register_deactivation_hook(__FILE__, array($github, 'uninstall'));
+add_filter('the_content', array($github, 'get_code'), 8);
 ?>
